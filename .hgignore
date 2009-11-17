@@ -4,6 +4,9 @@ syntax: glob
 *~
 *.o
 tests/*.err
+Debug/*.png
+Debug/*.jpg
+Debug/grayscale
 
 syntax: regexp
 .*\#.*\#$
