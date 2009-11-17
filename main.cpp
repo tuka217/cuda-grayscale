@@ -106,12 +106,14 @@ int main(int argc, char** argv)
 	long start = get_time();
 #endif
 
-	cudaMemcpy(imagem_cpu, imagem_gpu, (width * height * 4) * sizeof(float), cudaMemcpyDeviceToHost);
+    cuda_grayscale(imagem_gpu, width, height, grid, block);
 
 #ifdef DEBUG_TIME
 	long diff = get_time() - start;
-	std::cout << "* Time elapsed: " << std::setprecision(5) << diff/1000000.0 << std::endl;
+	std::cout << "* Time elapsed: " << std::setprecision(4) << diff/1000000.0 << std::endl;
 #endif
+
+	cudaMemcpy(imagem_cpu, imagem_gpu, (width * height * 4) * sizeof(float), cudaMemcpyDeviceToHost);
 
 	char* buff = new char[width * height * bpp];
 	for (int i = 0; i < (width * height); i++)
@@ -135,15 +137,13 @@ int main(int argc, char** argv)
     std::cout << std::endl << std::endl;
 #endif
 
-	IplImage* out_image = cvCreateImage( cvSize(width, height), input_image->depth, bpp);
+	IplImage* out_image = cvCreateImage(cvSize(width, height), input_image->depth, bpp);
 	out_image->imageData = buff;
 
-	if( !cvSaveImage(argv[2], out_image) )
+	if (!cvSaveImage(argv[2], out_image))
     {
         std::cout << "ERROR: Failed to write image file" << std::endl;
     }
-
-	cuda_grayscale(imagem_gpu, width, height, grid, block);
 
 	cvReleaseImage(&input_image);
     cvReleaseImage(&out_image);
