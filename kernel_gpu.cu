@@ -44,5 +44,3 @@ extern "C" void cuda_grayscale(float* imagem, int width, int height, dim3 blocks
 	grayscale <<< blocks, block_size >>> ((float4*)imagem, width, height);
 }
 
-
-

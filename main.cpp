@@ -12,8 +12,8 @@
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
  *
- *   * Neither the name of the Author nor the names of its contributors may be 
- *     used to endorse or promote products derived from this software without 
+ *   * Neither the name of the Author nor the names of its contributors may be
+ *     used to endorse or promote products derived from this software without
  *     specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
@@ -31,8 +31,21 @@
 
 #include <cv.h>
 #include <highgui.h>
+#include <iomanip>
 #include <iostream>
 #include <math.h>
+#include <sys/time.h>
+
+
+#define DEBUG_TIME
+
+
+static inline long get_time()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000000) + tv.tv_usec;
+}
 
 
 int main(int argc, char** argv)
@@ -43,7 +56,7 @@ int main(int argc, char** argv)
         exit(1);
     }
 
-	IplImage* input_image = NULL;
+    IplImage* input_image = NULL;
 	input_image = cvLoadImage(argv[1], CV_LOAD_IMAGE_UNCHANGED);
     if(!input_image)
     {
@@ -54,11 +67,12 @@ int main(int argc, char** argv)
 	int width = input_image->width;
     int height = input_image->height;
     int bpp = input_image->nChannels;
+
+#ifdef DEBUG
 	std::cout << ">> Width:" << width << std::endl <<
 		         ">> Height:" << height << std::endl <<
 				 ">> Bpp:" << bpp << std::endl;
 
-#ifdef DEBUG
     std::cout << std::endl << ">>> Debugging Original data:" << std::endl;
     for (int i=0; i < width*height*bpp; i+=bpp)
     {
@@ -87,10 +101,17 @@ int main(int argc, char** argv)
 
 	dim3 block(16, 16);
 	dim3 grid((int)ceil(double((width * height) / 256.0)));
-															
-	cuda_grayscale(imagem_gpu, width, height, grid, block);
+
+#ifdef DEBUG_TIME
+	long start = get_time();
+#endif
 
 	cudaMemcpy(imagem_cpu, imagem_gpu, (width * height * 4) * sizeof(float), cudaMemcpyDeviceToHost);
+
+#ifdef DEBUG_TIME
+	long diff = get_time() - start;
+	std::cout << "* Time elapsed: " << std::setprecision(5) << diff/1000000.0 << std::endl;
+#endif
 
 	char* buff = new char[width * height * bpp];
 	for (int i = 0; i < (width * height); i++)
@@ -121,6 +142,8 @@ int main(int argc, char** argv)
     {
         std::cout << "ERROR: Failed to write image file" << std::endl;
     }
+
+	cuda_grayscale(imagem_gpu, width, height, grid, block);
 
 	cvReleaseImage(&input_image);
     cvReleaseImage(&out_image);

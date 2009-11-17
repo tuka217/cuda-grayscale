@@ -1,6 +1,6 @@
 CXX=g++
 
-CUDA_INSTALL_PATH= /usr/local/cuda
+CUDA_INSTALL_PATH=/usr/local/cuda
 CFLAGS= -I. -I$(CUDA_INSTALL_PATH)/include `pkg-config --cflags opencv`
 LDFLAGS= -L$(CUDA_INSTALL_PATH)/lib -lcudart `pkg-config --libs opencv`
 
