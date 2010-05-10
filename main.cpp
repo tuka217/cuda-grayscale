@@ -34,18 +34,11 @@
 #include <iomanip>
 #include <iostream>
 #include <math.h>
-#include <sys/time.h>
+#include <sys/timeb.h>
+#include <time.h>
 
 
 #define DEBUG_TIME
-
-
-static inline long get_time()
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (tv.tv_sec * 1000000) + tv.tv_usec;
-}
 
 
 int main(int argc, char** argv)
@@ -86,41 +79,83 @@ int main(int argc, char** argv)
     std::cout << std::endl << std::endl;
 #endif
 
-    float* imagem_cpu = new float[width * height * 4];
+    float* cpu_image = new float[width * height * 4];
+    if (!cpu_image)
+    {
+        std::cout << "ERROR: Failed to allocate memory" << std::endl;
+        return -1;
+    }
+
 	for (int i = 0; i < width * height; i++)
 	{
-		imagem_cpu[i * 4 + 0] = (unsigned char)input_image->imageData[i * bpp + 0] / 255.f;
-		imagem_cpu[i * 4 + 1] = (unsigned char)input_image->imageData[i * bpp + 1] / 255.f;
-		imagem_cpu[i * 4 + 2] = (unsigned char)input_image->imageData[i * bpp + 2] / 255.f;
+		cpu_image[i * 4 + 0] = (unsigned char)input_image->imageData[i * bpp + 0] / 255.f;
+		cpu_image[i * 4 + 1] = (unsigned char)input_image->imageData[i * bpp + 1] / 255.f;
+		cpu_image[i * 4 + 2] = (unsigned char)input_image->imageData[i * bpp + 2] / 255.f;
 	}
 
-	float* imagem_gpu = new float[width * height * 4];
+#ifdef DEBUG_TIME
+    //Start clock
+    struct timeb start_time_st;
+    ftime(&start_time_st);
+#endif
 
-	cudaMalloc((void **)(&imagem_gpu), (width * height * 4) * sizeof(float));
-	cudaMemcpy(imagem_gpu, imagem_cpu, (width * height * 4) * sizeof(float), cudaMemcpyHostToDevice);
+    float* gpu_image = NULL;
+	cudaError_t cuda_err = cudaMalloc((void **)(&gpu_image), (width * height * 4) * sizeof(float));
+    if (cuda_err != cudaSuccess)
+    {
+        std::cout << "ERROR: Failed cudaMalloc" << std::endl;
+        return -1;
+    }
+
+	cuda_err = cudaMemcpy(gpu_image, cpu_image, (width * height * 4) * sizeof(float), cudaMemcpyHostToDevice);
+    if (cuda_err != cudaSuccess)
+    {
+        std::cout << "ERROR: Failed cudaMemcpy" << std::endl;
+        return -1;
+    }
 
 	dim3 block(16, 16);
 	dim3 grid((int)ceil(double((width * height) / 256.0)));
 
+    cuda_grayscale(gpu_image, width, height, grid, block);
+
+	cudaMemcpy(cpu_image, gpu_image, (width * height * 4) * sizeof(float), cudaMemcpyDeviceToHost);
+    if (cuda_err != cudaSuccess)
+    {
+        std::cout << "ERROR: Failed cudaMemcpy" << std::endl;
+        return -1;
+    }
+
 #ifdef DEBUG_TIME
-	long start = get_time();
+    // Stop clock
+    struct timeb stop_time_st;
+    ftime(&stop_time_st);
+    double elapsed = ((double) stop_time_st.time + ((double) stop_time_st.millitm * 0.001)) -
+                     ((double) start_time_st.time + ((double) start_time_st.millitm * 0.001));
+
+	std::cout << "* Time elapsed: " << std::setprecision(5) << elapsed << " sec" << std::endl;
 #endif
 
-    cuda_grayscale(imagem_gpu, width, height, grid, block);
-
-#ifdef DEBUG_TIME
-	long diff = get_time() - start;
-	std::cout << "* Time elapsed: " << std::setprecision(4) << diff/1000000.0 << std::endl;
-#endif
-
-	cudaMemcpy(imagem_cpu, imagem_gpu, (width * height * 4) * sizeof(float), cudaMemcpyDeviceToHost);
+    cuda_err = cudaFree(gpu_image);
+    if (cuda_err != cudaSuccess)
+    {
+        std::cout << "ERROR: Failed cudaFree" << std::endl;
+        return -1;
+    }
 
 	char* buff = new char[width * height * bpp];
+    if (!buff)
+    {
+        std::cout << "ERROR: Failed to allocate memory" << std::endl;
+        return -1;
+    }
+
+
 	for (int i = 0; i < (width * height); i++)
 	{
-		buff[i * bpp + 0] = (char)floor(imagem_cpu[i * 4 + 0] * 255.f);
-		buff[i * bpp + 1] = (char)floor(imagem_cpu[i * 4 + 1] * 255.f);
-		buff[i * bpp + 2] = (char)floor(imagem_cpu[i * 4 + 2] * 255.f);
+		buff[i * bpp + 0] = (char)floor(cpu_image[i * 4 + 0] * 255.f);
+		buff[i * bpp + 1] = (char)floor(cpu_image[i * 4 + 1] * 255.f);
+		buff[i * bpp + 2] = (char)floor(cpu_image[i * 4 + 2] * 255.f);
 	}
 
 #ifdef DEBUG
@@ -138,15 +173,25 @@ int main(int argc, char** argv)
 #endif
 
 	IplImage* out_image = cvCreateImage(cvSize(width, height), input_image->depth, bpp);
+    if (!out_image)
+    {
+        std::cout << "ERROR: Failed cvCreateImage" << std::endl;
+        return -1;
+    }
+
 	out_image->imageData = buff;
 
 	if (!cvSaveImage(argv[2], out_image))
     {
-        std::cout << "ERROR: Failed to write image file" << std::endl;
+        std::cout << "ERROR: Failed cvSaveImage" << std::endl;
     }
 
 	cvReleaseImage(&input_image);
     cvReleaseImage(&out_image);
+
+
+    delete[] cpu_image;
+    delete[] buff;
 
 	return 0;
 }
